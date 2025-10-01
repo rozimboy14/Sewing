@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+{% load dict_filters %}
+{% load humanize %}
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Accessory Stock Report</title>
+    <style>
+@page {
+    size: A4;
+    margin: 15px;
+}
+
+body {
+    font-family: "DejaVu Sans", Arial, sans-serif;
+    margin-right: 45px;
+    padding: 0;
+}
+html {
+     margin: 0;
+    padding: 0;
+}
+
+        h1 {
+            color: #0d47a1;
+            text-align: center;
+            margin: 0;
+            font-size: 20px;
+            margin-bottom: 5px;
+        }
+
+        .info {
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+               table-layout: fixed;
+        }
+
+        th, td {
+
+            border: 1px solid #777;
+            font-size: 11px;
+            padding: 3px;
+            text-align: center;
+                word-wrap: break-word;     /* eski brauzerlar uchun */
+    overflow-wrap: break-word; /* zamonaviy brauzerlar va PDF generatorlar uchun */
+    hyphens: auto;
+        }
+
+        th {
+            background-color: #d9d9d9;
+            font-weight: bold;
+        }
+
+
+
+        footer {
+            position: fixed;
+            bottom: 0;
+            text-align: center;
+            font-size: 10px;
+            color: grey;
+        }
+    </style>
+</head>
+<body>
+ <h1>Приход</h1>
+ <h3 style="text-align: center;font-size: 16px;margin: 0;margin-bottom: 6px">{{ total_entry.created_date }}</h3>
+    <p style="text-align: center;margin: 0">{{ total_entry.comment|default:"None" }}</p>
+
+{% if grouped_orders %}
+<h4 style="text-align: center;margin: 0;margin-top: 8px">Крои</h4>
+<table>
+    <thead>
+        <tr>
+            <th style="width: 20%;font-size: 10px">Бренд</th>
+            <th style="width: 30%;font-size: 10px">Заказ</th>
+            <th style="width: 30%;font-size: 10px">Вариант</th>
+            <th style="width: 20%;font-size: 10px">Кол-во</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for brand, orders in grouped_orders.items %}
+            {% for order, variants in orders.items %}
+                {% for variant in variants %}
+                    <tr>
+                        {% if forloop.first and forloop.parentloop.first %}
+                            <td rowspan="{{ brand_rowspans|get_item:brand }}">{{ brand }}</td>
+                        {% endif %}
+                        {% if forloop.first %}
+                            <td rowspan="{{ variants|length }}">{{ order }}</td>
+                        {% endif %}
+                        <td style="font-size: 10px">{{ variant.variant_name }}</td>
+                        <td style="font-size: 10px">{{ variant.quantity }}</td>
+                    </tr>
+                {% endfor %}
+                <tr>
+                    <td colspan="2" style="text-align:center; font-weight:bold;">Итого по заказу:</td>
+                    <td colspan="1" style="font-weight:bold;">{{ order_totals|get_item:brand|get_item:order }}</td>
+                </tr>
+            {% endfor %}
+             <tr>
+        <td colspan="3" style="text-align:center; font-weight:bold; background-color:#f0f0f0;">
+            Итого по бренду {{ brand }}:
+        </td>
+        <td style="font-weight:bold; background-color:#f0f0f0;">
+            {{ brand_order_totals|get_item:brand }}
+        </td>
+    </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+{% if grouped_accessories %}
+<h4 style="text-align: center;margin: 0;margin-top: 5px">Аксессуар</h4>
+<table>
+    <thead>
+        <tr>
+            <th style="width: 30%;font-size: 10px">Бренд</th>
+            <th style="width: 40%;font-size: 10px">Аксессуар</th>
+            <th style="width: 20%;font-size: 10px">Примечание</th>
+            <th style="width: 10%;font-size: 10px">Кол-во</th>
+        </tr>
+    </thead>
+    <tbody>
+{% for brand, entries in grouped_accessories.items %}
+    {% for acc_entry in entries %}
+        <tr>
+            {% if forloop.first %}
+                <td rowspan="{{ entries|length }}">{{ brand }}</td>
+            {% endif %}
+            <td style="font-size: 10px">{{ acc_entry.accessory_name }}</td>
+            <td style="font-size: 10px">{{ acc_entry.accessory_comment }}</td>
+            <td style="font-size: 10px">
+                {{ acc_entry.quantity }}
+                <span style="font-size: 9px">{{ acc_entry.type_display }}</span>
+            </td>
+        </tr>
+
+        {% if forloop.last %}
+            <tr>
+                <td colspan="3" style="text-align: center; font-weight: bold;">Итого:</td>
+                <td style="font-weight: bold;">
+                    {{ brand_totals|get_item:brand }}
+                </td>
+            </tr>
+        {% endif %}
+    {% endfor %}
+{% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+    </tbody>
+</table>
+
+<footer>Generated by Sewing Management System</footer>
+</body>
+</html>

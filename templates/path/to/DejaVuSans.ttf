@@ -1,0 +1,4 @@
+from xhtml2pdf import pisa
+
+with open("report.pdf", "wb") as f:
+    pisa.CreatePDF(html_content, dest=f, encoding='UTF-8')
