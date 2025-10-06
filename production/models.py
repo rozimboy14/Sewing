@@ -343,12 +343,12 @@ class MonthPlaningOrder(models.Model):
         self.save(update_fields=["fact_quantity"])
         return self.fact_quantity
 
-    # def recalc_stock_quantity(self):
-    #     total = StockVariant.objects.filter(
-    #         stock__order=self.order,
-    #         stock__warehouse=self.month_planing.warehouse
-    #     ).aggregate(total=Sum('quantity'))['total'] or 0
-    #
-    #     self.stock_quantity = total
-    #     self.save(update_fields=["stock_quantity"])
-    #     return self.stock_quantity
+    def recalc_stock_quantity(self):
+        total = StockVariant.objects.filter(
+            stock__order=self.order,
+            stock__warehouse=self.month_planing.warehouse
+        ).aggregate(total=Sum('quantity'))['total'] or 0
+
+        self.stock_quantity = total
+        self.save(update_fields=["stock_quantity"])
+        return self.stock_quantity
