@@ -29,6 +29,8 @@ from reportlab.platypus import Table, TableStyle
 from reportlab.lib import colors
 from reportlab.lib.units import cm
 
+from users.permission import IsWarehouseHeadOrReadOnly
+
 
 # Create your views here.
 class WarehouseViewSet(viewsets.ModelViewSet):
@@ -38,6 +40,7 @@ class WarehouseViewSet(viewsets.ModelViewSet):
 
 class StockView(viewsets.ModelViewSet):
     queryset = Stock.objects.all()
+    permission_classes = [IsWarehouseHeadOrReadOnly]
     serializer_class = StockSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = {
@@ -240,6 +243,7 @@ class StockView(viewsets.ModelViewSet):
 class AccessoryStockView(viewsets.ModelViewSet):
     queryset = AccessoryStock.objects.all()
     serializer_class = AccessoryStockSerializer
+    permission_classes = [IsWarehouseHeadOrReadOnly]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -293,6 +297,7 @@ class AccessoryStockView(viewsets.ModelViewSet):
 class TotalEntryView(viewsets.ModelViewSet):
     queryset = TotalEntry.objects.all()
     serializer_class = TotalEntrySerializer
+    permission_classes = [IsWarehouseHeadOrReadOnly]
 
     @action(detail=True, methods=["post"], url_path="confirm")
     def confirm_entry(self, request, pk=None):
@@ -313,6 +318,7 @@ class TotalEntryView(viewsets.ModelViewSet):
 class AccessoryStockEntryView(viewsets.ModelViewSet):
     queryset = AccessoryStock.objects.all()
     serializer_class = AccessoryStockEntrySerializer
+    permission_classes = [IsWarehouseHeadOrReadOnly]
 
     def get_queryset(self):
         queryset = AccessoryStockEntry.objects.all()
@@ -350,6 +356,7 @@ class AccessoryStockEntryView(viewsets.ModelViewSet):
 class StockEntryView(viewsets.ModelViewSet):
     queryset = StockEntry.objects.all()
     serializer_class = StockEntrySerializer
+    permission_classes = [IsWarehouseHeadOrReadOnly]
 
     def get_queryset(self):
         queryset = StockEntry.objects.all()
@@ -779,6 +786,7 @@ class AccessoryStockExportPDFView(APIView):
 
 class StockEntryViewSet(viewsets.ModelViewSet):
     queryset = StockEntry.objects.all()
+    permission_classes = [IsWarehouseHeadOrReadOnly]
     serializer_class = StockEntrySerializer
 
     def create(self, request, *args, **kwargs):

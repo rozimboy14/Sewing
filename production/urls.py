@@ -5,7 +5,8 @@ from .views import (
     LineViewSet, LineOrdersViewSet, DailyViewSet, NormCategoryViewSet,
     ProductionNormViewSet, ProductionCategorySummaryViewSet,
     MonthPlaningViewSet, MonthPlaningOrderViewSet, refresh_stock_quantity,
-    refresh_all_month_planing_orders, upload_excel, NormCategoryByReportView
+    refresh_all_month_planing_orders, upload_excel, NormCategoryByReportView,
+    daily_production_chart_api
 )
 
 router = DefaultRouter()
@@ -25,5 +26,6 @@ urlpatterns = [
     path('refresh-stock/',refresh_all_month_planing_orders),
     path('upload/', upload_excel, name='upload_excel'),
 path('reports/<int:report_id>/norm-categories/', NormCategoryByReportView.as_view(), name='norm-categories-by-report'),
+    path('chart-production-report-daily/',daily_production_chart_api)
 
 ]

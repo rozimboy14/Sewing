@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import Sum, Q, F, Prefetch
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.template.loader import get_template
 from django_filters.rest_framework import DjangoFilterBackend
 from reportlab.pdfgen import canvas
@@ -31,6 +31,8 @@ from stock.signals import recalc_stock_quantity, \
     recalc_all_month_planing_orders
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
+
+from users.permission import IsPlannerOrReadOnly
 from .models import ProductionReport, LineOrders, Line, Daily, ProductionLine, \
     ProductionNorm, NormCategory, ProductionCategorySummary, MonthPlaningOrder, \
     MonthPlaning
@@ -62,7 +64,7 @@ def generate_daily_entries(report_id, date=None):
 class ProductionLineViewSet(viewsets.ModelViewSet):
     queryset = ProductionLine.objects.all()
     serializer_class = ProductionLineSerializer
-
+    permission_classes = [IsPlannerOrReadOnly]
     # filter_backends = [DjangoFilterBackend]
     # filterset_fields = {
     #     'warehouse_line__warehouse_id': ['exact'],
@@ -81,7 +83,7 @@ class ProductionLineViewSet(viewsets.ModelViewSet):
 class ProductionReportViewSet(viewsets.ModelViewSet):
     queryset = ProductionReport.objects.all()
     serializer_class = ProductionReportSerializer
-
+    permission_classes = [IsPlannerOrReadOnly]
     def get_queryset(self):
         queryset = super().get_queryset()
         warehouse_id = self.request.query_params.get('warehouse_id')
@@ -122,11 +124,13 @@ class ProductionReportViewSet(viewsets.ModelViewSet):
 
 class LineViewSet(viewsets.ModelViewSet):
     queryset = Line.objects.all()
+    permission_classes = [IsPlannerOrReadOnly]
 
 
 
 class LineOrdersViewSet(viewsets.ModelViewSet):
     queryset = LineOrders.objects.all()
+    permission_classes = [IsPlannerOrReadOnly]
     serializer_class = LineOrdersSerializer
 
 
@@ -134,12 +138,14 @@ class LineOrdersViewSet(viewsets.ModelViewSet):
 class ProductionCategorySummaryViewSet(viewsets.ModelViewSet):
     queryset = ProductionCategorySummary.objects.all()
     serializer_class = ProductionCategorySummarySerializer
+    permission_classes = [IsPlannerOrReadOnly]
 
 
 class DailyViewSet(viewsets.ModelViewSet):
     queryset = Daily.objects.all()
     serializer_class = DailySerializer
     filter_backends = [DjangoFilterBackend]
+    permission_classes = [IsPlannerOrReadOnly]
     filterset_fields = ['production_report']
 
 
@@ -149,6 +155,7 @@ class DailyViewSet(viewsets.ModelViewSet):
 class ProductionNormViewSet(viewsets.ModelViewSet):
     queryset = ProductionNorm.objects.all()
     serializer_class = ProductionNormSerializer
+    permission_classes = [IsPlannerOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['production_report']
     @action(detail=False, methods=["post"], url_path="bulk-create")
@@ -185,6 +192,7 @@ class ProductionNormViewSet(viewsets.ModelViewSet):
 
 class NormCategoryViewSet(viewsets.ModelViewSet):
     queryset = NormCategory.objects.all()
+    permission_classes = [IsPlannerOrReadOnly]
     serializer_class = NormCategorySerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['production_norm__production_report']
@@ -193,7 +201,7 @@ class NormCategoryViewSet(viewsets.ModelViewSet):
 
 class NormCategoryByReportView(generics.ListAPIView):
     serializer_class = NormCategorySerializer
-
+    permission_classes = [IsPlannerOrReadOnly]
     def get_queryset(self):
         report_id = self.kwargs['report_id']
         return NormCategory.objects.filter(
@@ -205,6 +213,7 @@ class MonthPlaningOrderViewSet(viewsets.ModelViewSet):
     serializer_class = MonthPlaningOrderSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['month_planing']
+    permission_classes = [IsPlannerOrReadOnly]
 
     def create(self, request, *args, **kwargs):
         is_many = isinstance(request.data, list)
@@ -235,7 +244,7 @@ def link_callback(uri, rel):
 class MonthPlaningViewSet(viewsets.ModelViewSet):
     queryset = MonthPlaning.objects.all()
     serializer_class = MonthPlaningSerializers
-
+    permission_classes = [IsPlannerOrReadOnly]
     def get_queryset(self):
         queryset = super().get_queryset()
         warehouse_id = self.request.query_params.get('warehouse_id')
@@ -350,3 +359,38 @@ def upload_excel(request):
     response = HttpResponse(pdf_value, content_type="application/pdf")
     response["Content-Disposition"] = 'attachment; filename="barcodes.pdf"'
     return response
+
+
+# views.py
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import Daily
+
+@api_view(['GET'])
+def daily_production_chart_api(request):
+    warehouse_id = request.GET.get('warehouse')
+    year = request.GET.get('year')
+    month = request.GET.get('month')
+
+    queryset = Daily.objects.select_related('production_report').all()
+
+    if warehouse_id:
+        queryset = queryset.filter(production_report__warehouse_id=warehouse_id)
+    if year:
+        queryset = queryset.filter(production_report__year=year)
+    if month:
+        queryset = queryset.filter(production_report__month=month)
+
+    queryset = queryset.order_by('date')
+
+    dates = [d.date.strftime("%d-%b") for d in queryset]
+    total_quantity = [(d.sort_1 or 0) +(d.sort_2 or 0) for d in queryset]
+    defects = [d.defect_quantity or 0 for d in queryset]
+
+    data = {
+        "dates": dates,
+        "total_quantity": total_quantity,
+        "defects": defects
+    }
+
+    return Response(data)

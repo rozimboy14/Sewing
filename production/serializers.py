@@ -239,6 +239,7 @@ class MonthPlaningSerializers(serializers.ModelSerializer):
     month_display = serializers.SerializerMethodField()
     warehouse_name = serializers.CharField(source='warehouse.name',
                                            read_only=True)
+    percent_done = serializers.SerializerMethodField()
 
     class Meta:
         model = MonthPlaning
@@ -246,6 +247,9 @@ class MonthPlaningSerializers(serializers.ModelSerializer):
                   'year_display',
                   'month_display',
                   'day_planing',
+                  'planing_quantity',
+                  'fact_quantity',
+                  'percent_done',
                   'comment', 'month_planing_orders']
 
     def get_month_display(self, obj):
@@ -253,3 +257,12 @@ class MonthPlaningSerializers(serializers.ModelSerializer):
 
     def get_year_display(self, obj):
         return str(obj.year)
+
+    def get_percent_done(self, obj):
+        fact_quantity = obj.fact_quantity or 0
+        planed_quantity = obj.planing_quantity or 0
+
+        if not planed_quantity:  # nolga bo‘lishdan saqlanish
+            return 0
+
+        return round((fact_quantity / planed_quantity) * 100, 1)
