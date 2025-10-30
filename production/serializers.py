@@ -1,23 +1,17 @@
-from rest_framework import serializers
-from rest_framework.exceptions import ValidationError
-from collections import defaultdict
-from django.db import transaction
+
 from production.models import (
-    ProductionLine, LineOrders, ProductionReport, Daily, Line,
+    ProductionLine, ProductionReport,
     NormCategory, ProductionNorm, ProductionCategorySummary,
-    MonthPlaning, MonthPlaningOrder, LineDailyOutput
+    MonthPlaning, MonthPlaningOrder
 )
-from sewing.models import Order, OrderVariant
+from sewing.models import Order
 from sewing.serializers import OrderSerializer
-from stock.models import Stock, StockVariant
-from services.stock_service import ensure_stock_variant_bulk, \
-    create_production_report_with_daily, NormCategoryService
+from services.stock_service import   NormCategoryService, \
+    check_stock_variant_bulk
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
-from collections import defaultdict
-from django.db import transaction
 from production.models import Daily, Line, LineOrders
-from sewing.models import OrderVariant
+
 
 
 class ProductionLineSerializer(serializers.ModelSerializer):
@@ -36,39 +30,57 @@ class LineOrdersSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = LineOrders
-        fields = ['id', 'order_line', 'order', 'sort_1', 'sort_2', 'defect_quantity', 'full_name']
+        fields = ['id', 'order_line', 'order', 'sort_1', 'sort_2',
+                  'defect_quantity', 'full_name']
 
     def validate(self, attrs):
-        line_order = self.instance or LineOrders(**attrs)
-        quantity = (attrs.get("sort_1") or 0) + (attrs.get("sort_2") or 0)
+        # yangi qiymatlarni olamiz
+        new_sort_1 = attrs.get("sort_1", getattr(self.instance, "sort_1", 0))
+        new_sort_2 = attrs.get("sort_2", getattr(self.instance, "sort_2", 0))
+        new_defect = attrs.get("defect_quantity", getattr(self.instance, "defect_quantity", 0))
+        new_total = (new_sort_1 or 0) + (new_sort_2 or 0) + (new_defect or 0)
 
-        if quantity:
+        # eski qiymatlarni olamiz
+        old_total = 0
+        if self.instance:
+            old_total = (
+                (self.instance.sort_1 or 0)
+                + (self.instance.sort_2 or 0)
+                + (self.instance.defect_quantity or 0)
+            )
+
+        # farqni topamiz
+        diff = new_total - old_total
+
+        # faqat ijobiy farqni tekshiramiz
+        if diff > 0:
+            line_order = self.instance or LineOrders(**attrs)
             try:
-                ensure_stock_variant_bulk(line_order, quantity)
+                # ✅ faqat diff miqdorini tekshiramiz
+                check_stock_variant_bulk(line_order, diff)
             except ValidationError as e:
                 raise serializers.ValidationError(e.detail)
 
         return attrs
 
-
 class LineSerializer(serializers.ModelSerializer):
     order_line = LineOrdersSerializer(many=True, read_only=True)
     line = serializers.CharField(read_only=True)
 
-
     class Meta:
         model = Line
-        fields = ['id', 'line_daily','line', 'production_norm',
+        fields = ['id', 'line_daily', 'line', 'production_norm',
                   'order_line', 'sort_1', 'sort_2', 'defect_quantity']
 
 
 class DailySerializer(serializers.ModelSerializer):
     lines = LineSerializer(many=True, read_only=True)
     is_weekend = serializers.SerializerMethodField()
+
     class Meta:
         model = Daily
         fields = ['id', 'production_report', 'date', 'lines', 'sort_1',
-                  'sort_2', 'defect_quantity','is_weekend']
+                  'sort_2', 'defect_quantity', 'is_weekend']
 
     def get_is_weekend(self, obj):
         """
@@ -85,23 +97,26 @@ class NormCategorySerializer(serializers.ModelSerializer):
     order_detail = OrderSerializer(source='order', read_only=True)
     order_variant_name = serializers.CharField(source='order_variant.name',
                                                read_only=True)
+
     class Meta:
         model = NormCategory
-        fields = ['id', 'production_norm', 'order', 'order_variant', 'order_name',
+        fields = ['id', 'production_norm', 'order', 'order_variant',
+                  'order_name',
                   'norm', 'total_sort_1', 'total_sort_2', 'total_defect'
-                  , 'order_variant_name','order_detail']
+            , 'order_variant_name', 'order_detail']
 
     def validate(self, attrs):
-        production_norm = attrs.get("production_norm") or getattr(self.instance,
-                                                                  "production_norm",
-                                                                  None)
+        production_norm = attrs.get("production_norm") or getattr(
+            self.instance,
+            "production_norm",
+            None)
         order_variant = attrs.get("order_variant") or getattr(self.instance,
                                                               "order_variant",
                                                               None)
 
         if NormCategory.objects.filter(production_norm=production_norm,
                                        order_variant=order_variant).exclude(
-                id=getattr(self.instance, "id", None)).exists():
+            id=getattr(self.instance, "id", None)).exists():
             raise serializers.ValidationError(
                 {"order": "Bu Model allaqachon mavjud!"})
         return attrs
@@ -112,11 +127,11 @@ class ProductionNormSerializer(serializers.ModelSerializer):
     line_name = serializers.CharField(source='line.full_name', read_only=True)
     total_norm = serializers.SerializerMethodField()
 
-
     class Meta:
         model = ProductionNorm
         fields = ['id', 'line', 'line_name', 'norm_category', 'total_norm',
-                  'production_report','total_sort_1','total_sort_2','total_defect']
+                  'production_report', 'total_sort_1', 'total_sort_2',
+                  'total_defect']
 
     def get_total_norm(self, obj):
         return sum(
@@ -146,7 +161,7 @@ class ProductionReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductionReport
         fields = ['id', 'warehouse', 'year', 'month', 'total_sort_1',
-                  'total_sort_2','total_defect',
+                  'total_sort_2', 'total_defect',
                   'total_norm', 'month_display', 'year_display',
                   'category_summaries', 'production_norm',
                   'daily_report', 'percent_done', 'day_norm', 'comment']
@@ -172,8 +187,6 @@ class ProductionReportSerializer(serializers.ModelSerializer):
 
     def get_year_display(self, obj):
         return str(obj.year)
-
-
 
 
 class ProductionNormBulkSerializer(serializers.Serializer):
@@ -210,6 +223,7 @@ class ProductionNormBulkSerializer(serializers.Serializer):
 
         return objs
 
+
 class MonthPlaningOrderSerializer(serializers.ModelSerializer):
     order = serializers.PrimaryKeyRelatedField(queryset=Order.objects.all())
     order_detail = OrderSerializer(source="order", read_only=True)
@@ -219,7 +233,8 @@ class MonthPlaningOrderSerializer(serializers.ModelSerializer):
         model = MonthPlaningOrder
         fields = ['id', 'stock_quantity', 'month_planing', 'order',
                   'order_detail',
-                  'planed_quantity', 'fact_quantity', 'percent_done']
+                  'planed_quantity', 'fact_quantity', 'norm_quantity',
+                  'percent_done']
 
     def get_percent_done(self, obj):
         fact_quantity = obj.fact_quantity or 0

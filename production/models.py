@@ -322,6 +322,7 @@ class MonthPlaningOrder(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE)
     planed_quantity = models.IntegerField()
     stock_quantity = models.IntegerField(blank=True, null=True)
+    norm_quantity = models.IntegerField(blank=True, null=True)
     fact_quantity = models.IntegerField(blank=True, null=True)
     comment = models.CharField( max_length=100,blank=True,null=True)
     def __str__(self):

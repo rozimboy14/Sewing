@@ -1,6 +1,8 @@
 from django.shortcuts import render
 from rest_framework import viewsets
+from rest_framework.decorators import api_view
 from rest_framework.filters import SearchFilter
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from services.custom_pagination import CustomPagination
@@ -24,9 +26,14 @@ class BrandViewSet(viewsets.ModelViewSet):
     filter_backends = [SearchFilter]
     search_fields = ['name']
 
-    def get_queryset(self):
-        qs = super().get_queryset().only('id', 'name')
-        return qs
+@api_view(['GET'])
+def brand_list(request):
+    search = request.GET.get("search", "")
+    brands = Brand.objects.all().order_by('name')
+    if search:
+        brands = brands.filter(name__icontains=search)
+    serializer = BrandSerializer(brands, many=True)
+    return Response(serializer.data)
 
 class SpecificationViewSet(viewsets.ModelViewSet):
     queryset = Specification.objects.all().order_by('name')
@@ -48,6 +55,7 @@ class AccesoryViewSet(viewsets.ModelViewSet):
     serializer_class = AccessorySerializer
     pagination_class = CustomPagination
     filter_backends = [SearchFilter]
+    filterset_fields = ['id']
     search_fields = ['name']
 
 class PackagingCategoryViewSet(viewsets.ModelViewSet):
@@ -59,6 +67,7 @@ class ArticleViewSet(viewsets.ModelViewSet):
     serializer_class = ArticleSerializer
     pagination_class = CustomPagination
     filter_backends = [SearchFilter]
+    filterset_fields = ['id']
     search_fields = ['name','article']
 
 class OrderViewSet(viewsets.ModelViewSet):
@@ -66,6 +75,7 @@ class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
     pagination_class = CustomPagination
     filter_backends = [SearchFilter]
+    filterset_fields = ['id']
     search_fields = ['article__name','article__article','specification__name',
                      'comment','article__brand__name']
 

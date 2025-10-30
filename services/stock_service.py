@@ -9,46 +9,37 @@ from stock.models import Stock, StockVariant, AccessoryStock
 import datetime
 import calendar
 
-def ensure_stock_variant_bulk(line_order, quantity):
-    """Variant va aksessuarlarni tekshiradi"""
+def check_stock_variant_bulk(line_order, quantity):
+    """Variant va aksessuarlarni faqat tekshiradi, stokni kamaytirmaydi"""
     norm_category = line_order.order
     order_variant = norm_category.order_variant
     warehouse = line_order.order_line.line_daily.production_report.warehouse
-    if not warehouse:
-        raise ValueError("Warehouse None bo‘lishi mumkin emas")
 
-    stock, _ = Stock.objects.get_or_create(order=norm_category.order, warehouse=warehouse)
-    sv, _ = StockVariant.objects.get_or_create(stock=stock, variant=order_variant)
-
-    errors = []
-
-    if sv.quantity < quantity:
-        errors.append(
-            f"{warehouse.name} omborda yetarli mahsulot yo‘q: "
-            f"{norm_category.order.full_name}-{order_variant.name}. Qoldiq:"
-            f" {sv.quantity}, kerak: {quantity}"
+    stock = StockVariant.objects.filter(
+        stock__order=norm_category.order,
+        variant=order_variant,
+        stock__warehouse=warehouse
+    ).first()
+    if not stock or stock.quantity < quantity:
+        raise ValidationError(
+            {
+                "detail": f"{warehouse.name} omborda yetarli mahsulot yo‘q: "
+                          f"{norm_category.order.full_name}-{order_variant.name}. "
+                          f"Qoldiq: {stock.quantity if stock else 0}, kerak: {quantity}"
+            }
         )
 
-    # Barcha aksessuarlarni prefetch qilish
+    # Aksessuarlarni tekshirish
     accessories = ArticleAccessory.objects.filter(article=order_variant.order.article)
-    acc_stocks = {a.accessory_id: a for a in AccessoryStock.objects.filter(
-        accessory__in=[aa.accessory for aa in accessories], warehouse=warehouse
-    )}
-
     for aa in accessories:
-        acc_stock = acc_stocks.get(aa.accessory_id)
-        if not acc_stock:
-            acc_stock = AccessoryStock.objects.create(accessory=aa.accessory, warehouse=warehouse, total_quantity=0)
-            acc_stocks[aa.accessory_id] = acc_stock
-
-        if acc_stock.total_quantity < quantity * aa.quantity:
-            errors.append(
-                f"{warehouse.name} omborda aksessuar yetarli emas: {aa.accessory.name}. "
-                f"Qoldiq: {acc_stock.total_quantity}, kerak: {quantity * aa.quantity}"
+        acc_stock = AccessoryStock.objects.filter(accessory=aa.accessory, warehouse=warehouse).first()
+        if not acc_stock or acc_stock.total_quantity < quantity * aa.quantity:
+            raise ValidationError(
+                {
+                    "detail": f"{warehouse.name} omborda aksessuar yetarli emas: {aa.accessory.name}. "
+                              f"Qoldiq: {acc_stock.total_quantity if acc_stock else 0}, kerak: {quantity * aa.quantity}"
+                }
             )
-
-    if errors:
-        raise ValidationError({"detail": errors})
 
 
 @transaction.atomic

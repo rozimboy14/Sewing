@@ -61,8 +61,8 @@ class StockEntrySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = StockEntry
-        fields = ["id",'total_entry', "order", 'order_name', 'variants',
-                  "date", 'brand_name', 'total_quantity']
+        fields = ["id", "total_entry", "order", "order_name", "variants",
+                  "date", "brand_name", "total_quantity"]
 
     def get_total_quantity(self, obj):
         return obj.variants.aggregate(total=Sum('quantity'))['total'] or 0
@@ -77,29 +77,65 @@ class StockEntrySerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         variants_data = validated_data.pop("variants", None)
 
-        # oddiy maydonlarni yangilash
+        # Oddiy maydonlarni yangilash
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
         if variants_data is not None:
-            for v in variants_data:
-                variant = v.get("variant")
-                quantity = v.get("quantity")
+            existing_variants = {v.id: v for v in instance.variants.all()}
+            sent_ids = set()
+            to_update = []
+            to_create = []
 
-                # agar variant obyekt bo‘lsa → id olamiz
-                if isinstance(variant, OrderVariant):
+            for v in variants_data:
+                sev_id = v.get("id")
+
+                # variant ni id ga aylantiramiz (dict, obj, int)
+                variant = v.get("variant")
+                if isinstance(variant, dict):
+                    variant_id = variant.get("id")
+                elif hasattr(variant, "id"):
                     variant_id = variant.id
                 else:
                     variant_id = variant
 
-                entry_variant, created = StockEntryVariant.objects.update_or_create(
-                    stock_entry=instance,
-                    variant_id=variant_id,
-                    defaults={"quantity": quantity}
-                )
+                quantity = v.get("quantity")
+
+                if sev_id and sev_id in existing_variants:
+                    entry_variant = existing_variants[sev_id]
+                    entry_variant.quantity = quantity
+                    entry_variant.variant_id = variant_id
+                    to_update.append(entry_variant)
+                    sent_ids.add(sev_id)
+                else:
+                    # yangi variant
+                    to_create.append(
+                        StockEntryVariant(
+                            stock_entry=instance,
+                            variant_id=variant_id,
+                            quantity=quantity
+                        )
+                    )
+
+            # 🔥 O‘chirish: yuborilmagan variantlar
+            to_delete = [
+                v for vid, v in existing_variants.items() if
+                vid not in sent_ids
+            ]
+            if to_delete:
+                StockEntryVariant.objects.filter(
+                    id__in=[v.id for v in to_delete]).delete()
+
+            if to_update:
+                StockEntryVariant.objects.bulk_update(to_update, ["quantity",
+                                                                  "variant_id"])
+            if to_create:
+                StockEntryVariant.objects.bulk_create(to_create)
 
         return instance
+
+
 class StockEntryBulkSerializer(serializers.Serializer):
     total_entry = serializers.PrimaryKeyRelatedField(queryset=TotalEntry.objects.all())
     orders = serializers.ListField()

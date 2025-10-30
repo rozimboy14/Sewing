@@ -3,7 +3,7 @@ from django.urls import path, include
 
 from sewing.views import (BrandViewSet, SpecificationViewSet, OrderViewSet,
                           PackagingCategoryViewSet, ArticleViewSet,
-                          SewingCategoryViewSet, AccesoryViewSet)
+                          SewingCategoryViewSet, AccesoryViewSet,brand_list)
 
 router = DefaultRouter()
 
@@ -18,4 +18,6 @@ router.register('accessory', AccesoryViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('brand-options/',brand_list),
+
 ]
